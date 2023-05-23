@@ -21,17 +21,12 @@ const configuration = new Configuration({
   apiKey: config.openaiAuth,
 });
 
-console.log(octokit.auth);
-
 const fetchGitHubRepoContents = async (octokit) => {
   try {
     const response = await octokit.request('GET /repos/{owner}/{repo}/contents', {
       owner: config.gitOwner,
       repo: config.gitRepo,
     });
-
-    console.log('GitHub API Request:', response.request);
-    console.log('GitHub API Response:', response.data);
 
     const files = await Promise.all(
       response.data
@@ -102,3 +97,5 @@ app.use(express.static('public'));
 app.listen(port, () => {
   console.log(`Server listening at http://localhost:${port}`);
 });
+
+console.log(`node index.js is loaded.`)
