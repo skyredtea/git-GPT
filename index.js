@@ -1,29 +1,30 @@
 const express = require('express');
 const fs = require('fs');
-const configData = fs.readFileSync('config.json');
-const config = JSON.parse(configData);
 const { Configuration, OpenAIApi } = require('openai');
+const { Octokit } = require('@octokit/rest');
 
 const app = express();
 const port = 3000;
 
-const {
-    Octokit
-} = require('@octokit/rest');
+const configData = fs.readFileSync('config.json');
+const config = JSON.parse(configData);
 
 const octokit = new Octokit({
     auth: config.gitAuth,
 });
 
-
-app.use(express.json());
-
 const configuration = new Configuration({
-    organization: config.organization,
+    organization: config.openaiOrg,
     apiKey: config.openaiAuth,
 });
 
-const fetchGitHubRepoContents = async (octokit) => {
+const openai = new OpenAIApi(configuration);
+
+app.use(express.json());
+app.use(express.static(__dirname + '/public'));
+app.use(express.static('public'));
+
+async function fetchGitHubRepoContents(octokit) {
     try {
         const response = await octokit.request('GET /repos/{owner}/{repo}/contents', {
             owner: config.gitOwner,
@@ -32,7 +33,7 @@ const fetchGitHubRepoContents = async (octokit) => {
 
         const files = await Promise.all(
             response.data
-            .filter(file => file.type === 'file') // Add this line to filter out non-file types
+            .filter(file => file.type === 'file')
             .map(async (file) => {
                 const contentResponse = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
                     owner: config.gitOwner,
@@ -57,13 +58,29 @@ const fetchGitHubRepoContents = async (octokit) => {
     }
 };
 
+async function getChatGPTResponse(messages, maxTokens) {
+    const response = await openai.createChatCompletion({
+        model: 'gpt-3.5-turbo',
+        messages: messages,
+        max_tokens: maxTokens,
+    });
+
+    const generatedText = response.data.choices[0].message.content.trim();
+    const tokensUsed = response.data.usage.total_tokens;
+
+    return {
+        generatedText,
+        tokensUsed
+    };
+}
+
 app.get('/', (req, res) => {
     res.sendFile(__dirname + '/index.html');
 });
 
 app.get('/files', async (req, res) => {
     try {
-        const files = await fetchGitHubRepoContents(octokit); // Pass the octokit instance as an argument
+        const files = await fetchGitHubRepoContents(octokit);
         res.json({
             files
         });
@@ -75,41 +92,23 @@ app.get('/files', async (req, res) => {
     }
 });
 
-app.use(express.static(__dirname + '/public'));
-
-const openai = new OpenAIApi(configuration);
-
-async function getChatGPTResponse(messages) {
-    const response = await openai.createChatCompletion({
-        model: 'gpt-3.5-turbo',
-        messages: messages,
-        max_tokens: 100,
-    });
-
-    const generatedText = response.data.choices[0].message.content.trim();
-    return generatedText;
-}
-
 app.post('/chat', async (req, res) => {
     const conversation = req.body.message;
     const maxTokens = req.body.max_tokens;
-
-    const response = await openai.createChatCompletion({
-        model: 'gpt-3.5-turbo',
-        messages: conversation,
-        max_tokens: maxTokens,
-    });
-
-    const generatedText = response.data.choices[0].message.content.trim();
-    const tokensUsed = response.data.usage.total_tokens;
-
-    res.json({
-        generatedText,
-        tokensUsed
-    }); // send used tokens back to the client
+    
+    try {
+        const { generatedText, tokensUsed } = await getChatGPTResponse(conversation, maxTokens);
+        res.json({
+            generatedText,
+            tokensUsed
+        });
+    } catch (error) {
+        console.error('Error in chat completion:', error);
+        res.status(500).json({
+            message: 'Error in chat completion'
+        });
+    }
 });
-
-app.use(express.static('public'));
 
 app.listen(port, () => {
     console.log(`Server listening at http://localhost:${port}`);
