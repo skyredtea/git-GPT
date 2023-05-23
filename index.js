@@ -83,7 +83,7 @@ async function getChatGPTResponse(messages) {
     const response = await openai.createChatCompletion({
         model: 'gpt-3.5-turbo',
         messages: messages,
-        max_tokens: 750,
+        max_tokens: 100,
     });
 
     const generatedText = response.data.choices[0].message.content.trim();
