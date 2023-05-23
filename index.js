@@ -85,11 +85,19 @@ async function getChatGPTResponse(messages) {
 }
 
 app.post('/chat', async (req, res) => {
-  const conversation = req.body.message; // conversation is now an array
+  const conversation = req.body.message; 
+  const maxTokens = req.body.max_tokens;
 
-  const response = await getChatGPTResponse(conversation);
+  const response = await openai.createChatCompletion({
+      model: 'gpt-3.5-turbo',
+      messages: conversation,
+      max_tokens: maxTokens,
+  });
 
-  res.json({ generatedText: response });
+  const generatedText = response.data.choices[0].message.content.trim();
+  const tokensUsed = response.data.usage.total_tokens;
+
+  res.json({ generatedText, tokensUsed }); // send used tokens back to the client
 });
 
 app.use(express.static('public'));
