@@ -2,49 +2,6 @@
 <html>
 <head>
   <title>ChatGPT Web Interface</title>
-</head>
-<body>
-  <div id="conversation"></div>
-  <form id="message-form">
-    <input type="text" id="user-input" placeholder="User input" />
-    <button type="submit">Send</button>
-  </form>
-
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      const conversationDiv = document.getElementById('conversation');
-      const messageForm = document.getElementById('message-form');
-      const userInput = document.getElementById('user-input');
-
-      const addMessageToConversation = (role, content) => {
-        const messageElement = document.createElement('div');
-        messageElement.classList.add('message');
-        messageElement.classList.add(role);
-        messageElement.textContent = content;
-        conversationDiv.appendChild(messageElement);
-      };
-
-      messageForm.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        const userMessage = userInput.value;
-        addMessageToConversation('user', userMessage);
-
-        const response = await fetch('/chat', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ message: userMessage })
-        });
-
-        const { generatedText } = await response.json();
-        addMessageToConversation('assistant', generatedText);
-
-        userInput.value = '';
-      });
-    });
-  </script>
-
   <style>
     .message {
       margin-bottom: 10px;
@@ -57,6 +14,125 @@
     .assistant {
       color: green;
     }
+
+    .sidebar {
+      width: 200px;
+      background-color: #f1f1f1;
+      padding: 10px;
+      float: left;
+    }
+
+    .sidebar h3 {
+      margin-top: 0;
+    }
+
+    .sidebar ul {
+      list-style-type: none;
+      padding: 0;
+    }
+
+    .sidebar li {
+      cursor: pointer;
+    }
+
+    .sidebar li.selected {
+      background-color: #c8e6c9;
+    }
+
+    .main {
+      margin-left: 220px;
+      padding: 10px;
+    }
   </style>
+</head>
+<body>
+  <div class="sidebar">
+    <h3>GitHub Repo Files</h3>
+    <ul id="file-list"></ul>
+  </div>
+
+  <div class="main">
+    <div id="conversation"></div>
+    <form id="message-form">
+      <input type="text" id="user-input" placeholder="User input" />
+      <button type="submit">Send</button>
+    </form>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const fileList = document.getElementById('file-list');
+        const conversationDiv = document.getElementById('conversation');
+        const messageForm = document.getElementById('message-form');
+        const userInput = document.getElementById('user-input');
+
+        let selectedFiles = [];
+        let files = []; // Store all the files here
+
+        // Fetch repository files and populate the sidebar
+        fetch('/files')
+            .then((response) => response.json())
+            .then((data) => {
+                files = data.files; // Save the files
+                files.forEach((file) => {
+                    const listItem = document.createElement('li');
+                    listItem.textContent = file.name;
+                    listItem.addEventListener('click', () => {
+                        const selectedIndex = selectedFiles.findIndex(selectedFile => selectedFile.name === file.name);
+                        if (selectedIndex > -1) {
+                            selectedFiles.splice(selectedIndex, 1);
+                            listItem.classList.remove('selected');
+                        } else {
+                            selectedFiles.push(file);
+                            listItem.classList.add('selected');
+                        }
+                    });
+                    fileList.appendChild(listItem);
+                });
+            });
+
+        // Function to handle sending user input and displaying response
+        const sendMessage = async (event) => {
+            event.preventDefault();
+            const userMessage = userInput.value;
+            addMessageToConversation('user', userMessage);
+
+            let conversation = [
+                { role: 'system', content: 'You are a helpful assistant.' },
+                { role: 'user', content: userMessage },
+            ];
+
+            selectedFiles.forEach(file => {
+                conversation.push({ role: 'system', content: `This is the content of the file named ${file.name}: ${file.content}` });
+            });
+
+            const response = await fetch('/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ message: conversation }), // send the entire conversation array
+            });
+
+            const { generatedText } = await response.json();
+            addMessageToConversation('assistant', generatedText);
+
+            userInput.value = '';
+        };
+
+
+        // Event listener for the form submission
+        messageForm.addEventListener('submit', sendMessage);
+
+        // Function to add messages to the conversation
+        const addMessageToConversation = (role, content) => {
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('message');
+            messageElement.classList.add(role);
+            messageElement.textContent = content;
+            conversationDiv.appendChild(messageElement);
+        };
+    });
+  </script>
 </body>
 </html>

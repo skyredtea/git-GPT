@@ -1,16 +1,80 @@
+const express = require('express');
 const fs = require('fs');
-const fetch = require('isomorphic-fetch');
-const { Octokit } = require('@octokit/rest');
-
 const configData = fs.readFileSync('config.json');
 const config = JSON.parse(configData);
-
 const { Configuration, OpenAIApi } = require('openai');
 
+const app = express();
+const port = 3000;
+
+const { Octokit } = require('@octokit/rest');
+
+const octokit = new Octokit({
+  auth: config.gitAuth,
+});
+
+
+app.use(express.json());
+
 const configuration = new Configuration({
-  organization: config.openaiOrg,
+  organization: config.organization,
   apiKey: config.openaiAuth,
 });
+
+console.log(octokit.auth);
+
+const fetchGitHubRepoContents = async (octokit) => {
+  try {
+    const response = await octokit.request('GET /repos/{owner}/{repo}/contents', {
+      owner: config.gitOwner,
+      repo: config.gitRepo,
+    });
+
+    console.log('GitHub API Request:', response.request);
+    console.log('GitHub API Response:', response.data);
+
+    const files = await Promise.all(
+      response.data
+        .filter(file => file.type === 'file')  // Add this line to filter out non-file types
+        .map(async (file) => {
+          const contentResponse = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
+            owner: config.gitOwner,
+            repo: config.gitRepo,
+            path: file.path,
+          });
+    
+          let content = '';
+          if (contentResponse.data.content) {
+            content = Buffer.from(contentResponse.data.content, 'base64').toString();
+          }
+    
+          return {
+            name: file.name,
+            content,
+          };
+        })
+    );       
+    return files;
+  } catch (error) {
+    throw new Error('Error fetching GitHub repository contents: ' + error.message);
+  }
+};
+
+app.get('/', (req, res) => {
+  res.sendFile(__dirname + '/index.html');
+});
+
+app.get('/files', async (req, res) => {
+  try {
+    const files = await fetchGitHubRepoContents(octokit); // Pass the octokit instance as an argument
+    res.json({ files });
+  } catch (error) {
+    console.error('Error fetching GitHub repository contents:', error);
+    res.status(500).json({ message: 'Error fetching repository contents' });
+  }
+});
+
+app.use(express.static(__dirname + '/public'));
 
 const openai = new OpenAIApi(configuration);
 
@@ -20,75 +84,21 @@ async function getChatGPTResponse(messages) {
     messages: messages,
     max_tokens: 750,
   });
+
   const generatedText = response.data.choices[0].message.content.trim();
-  const totalTokens = response.data.usage.total_tokens;
-  console.log(`Total tokens used: ${totalTokens}`);
   return generatedText;
 }
 
-async function getRepoContents(owner, repo, path) {
-  const octokit = new Octokit({
-    auth: config.gitAuth,
-  });
-  const response = await octokit.repos.getContent({
-    owner: owner,
-    repo: repo,
-    path: path,
-  });
+app.post('/chat', async (req, res) => {
+  const conversation = req.body.message; // conversation is now an array
 
-  if (response.status !== 200) {
-    throw new Error('Failed to fetch repository contents');
-  }
+  const response = await getChatGPTResponse(conversation);
 
-  return response.data;
-}
+  res.json({ generatedText: response });
+});
 
-async function fetchGitHubRepoContents(owner, repo, path) {
-    const contents = await getRepoContents(owner, repo, path);
-    const fileContent = contents.content; // Get the base64-encoded content
-  
-    const decodedContent = Buffer.from(fileContent, 'base64').toString('utf-8');
+app.use(express.static('public'));
 
-    return decodedContent;
-}
-
-async function getInput(question) {
-  const readline = require('readline');
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  return new Promise((resolve) => {
-    rl.question(question, (answer) => {
-      rl.close();
-      resolve(answer);
-    });
-  });
-}
-
-async function chatLoop() {
-  let conversation = [
-    { role: 'system', content: 'You are a helpful assistant.' },
-  ];
-
-  const repoOwner = config.gitOwner;
-  const repoName = config.gitRepo;
-  const repoPath = config.gitPath;
-  const repoContents = await fetchGitHubRepoContents(repoOwner, repoName, repoPath);
-  conversation.push({ role: 'assistant', content: repoContents });
-
-  while (true) {
-    const prompt = await getInput('User: ');
-    if (prompt.toLowerCase() === '/quit') {
-      console.log('Goodbye!');
-      break;
-    }
-    conversation.push({ role: 'user', content: prompt });
-    const response = await getChatGPTResponse(conversation);
-    console.log('ChatGPT: ' + response);
-    conversation.push({ role: 'assistant', content: response });
-  }
-}
-
-chatLoop();
+app.listen(port, () => {
+  console.log(`Server listening at http://localhost:${port}`);
+});
