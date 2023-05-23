@@ -1,172 +1,176 @@
 <!DOCTYPE html>
 <html>
-<head>
-  <title>ChatGPT Web Interface</title>
-  <style>
-    .message {
-      margin-bottom: 10px;
-    }
-
-    .user {
-      color: blue;
-    }
-
-    .assistant {
-      color: green;
-    }
-
-    .sidebar {
-      width: 200px;
-      background-color: #f1f1f1;
-      padding: 10px;
-      float: left;
-    }
-
-    .sidebar h3 {
-      margin-top: 0;
-    }
-
-    .sidebar ul {
-      list-style-type: none;
-      padding: 0;
-    }
-
-    .sidebar li {
-      cursor: pointer;
-    }
-
-    .sidebar li.selected {
-      background-color: #c8e6c9;
-    }
-
-    .main {
-      margin-left: 220px;
-      padding: 10px;
-    }
-
-    .sidebar-right {
-    width: 200px;
-    background-color: #f1f1c1;
-    padding: 10px;
-    float: right;
-    }
-    
-    .main {
-        margin-left: 220px;
-        margin-right: 220px;  /* Add this line to account for right sidebar */
-        padding: 10px;
-    }
-  </style>
-</head>
-<body>
-  <div class="sidebar">
-    <h3>GitHub Repo Files</h3>
-    <ul id="file-list"></ul>
-  </div>
-
-  <div class="sidebar-right">
-    <h3>Settings</h3>
-    <div>
-        <label for="max-tokens">Max Tokens:</label>
-        <input type="number" id="max-tokens" min="1" value="750">
-    </div>
-    <div>
-        <label for="display-tokens">Display Tokens Used:</label>
-        <input type="checkbox" id="display-tokens">
-    </div>
-  </div>
-
-  <div class="main">
-    <div id="conversation"></div>
-    <form id="message-form">
-      <input type="text" id="user-input" placeholder="User input" />
-      <button type="submit">Send</button>
-    </form>
-  </div>
-
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-        const fileList = document.getElementById('file-list');
-        const conversationDiv = document.getElementById('conversation');
-        const messageForm = document.getElementById('message-form');
-        const userInput = document.getElementById('user-input');
-
-        let selectedFiles = [];
-        let files = []; // Store all the files here
-
-        // Fetch repository files and populate the sidebar
-        fetch('/files')
-            .then((response) => response.json())
-            .then((data) => {
-                files = data.files; // Save the files
-                files.forEach((file) => {
-                    const listItem = document.createElement('li');
-                    listItem.textContent = file.name;
-                    listItem.addEventListener('click', () => {
-                        const selectedIndex = selectedFiles.findIndex(selectedFile => selectedFile.name === file.name);
-                        if (selectedIndex > -1) {
-                            selectedFiles.splice(selectedIndex, 1);
-                            listItem.classList.remove('selected');
-                        } else {
-                            selectedFiles.push(file);
-                            listItem.classList.add('selected');
-                        }
-                    });
-                    fileList.appendChild(listItem);
-                });
-            });
-
-        // Function to handle sending user input and displaying response
-        const sendMessage = async (event) => {
-            event.preventDefault();
-            const userMessage = userInput.value;
-            const maxTokens = parseInt(document.getElementById('max-tokens').value, 10);
-            const displayTokens = document.getElementById('display-tokens').checked;
-            addMessageToConversation('user', userMessage);
-
-            let conversation = [
-                { role: 'system', content: 'You are a helpful assistant.' },
-                { role: 'user', content: userMessage },
-            ];
-
-            selectedFiles.forEach(file => {
-                conversation.push({ role: 'system', content: `This is the content of the file named ${file.name}: ${file.content}` });
-            });
-
-            const response = await fetch('/chat', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ message: conversation, max_tokens: maxTokens }),
-            });
-
-            const { generatedText, tokensUsed } = await response.json();
-
-            addMessageToConversation('assistant', generatedText);
-            if (displayTokens) {
-                addMessageToConversation('assistant', `Tokens used: ${tokensUsed}`, true); // Add tokens used as a separate message, flagged as tokens message
-            }
-
-            userInput.value = '';
-        };
-
-        // Event listener for the form submission
-        messageForm.addEventListener('submit', sendMessage);
-
-        // Function to add messages to the conversation
-        const addMessageToConversation = (role, content, isTokensMessage) => {
-            const messageElement = document.createElement('div');
-            messageElement.classList.add('message');
-            messageElement.classList.add(role);
-            if (isTokensMessage) {
-                messageElement.style.color = 'red'; // If this is a tokens message, make the text red
-            }
-            messageElement.textContent = content;
-            conversationDiv.appendChild(messageElement);
-        };
-
-    });
-  </script>
-</body>
+   <head>
+      <title>ChatGPT Web Interface</title>
+      <style>
+         .message {
+         margin-bottom: 10px;
+         }
+         .user {
+         color: blue;
+         }
+         .assistant {
+         color: green;
+         }
+         .sidebar {
+         width: 200px;
+         background-color: #f1f1f1;
+         padding: 10px;
+         float: left;
+         height: 100vh;  /* 100% of the viewport height */
+         overflow-y: auto;  /* Enable scrolling if content is too long */
+         }
+         .sidebar ul {
+         list-style-type: none;
+         padding: 0;
+         }
+         .sidebar li {
+         cursor: pointer;
+         }
+         .main-container {
+         display: flex;  /* Use a flexbox layout */
+         }
+         .middle {
+         flex-grow: 1;  /* Allow the middle div to take up remaining space */
+         padding: 10px;
+         }
+         #code-display {
+         font-family: monospace;  /* Use a monospace font for code */
+         white-space: pre;  /* Preserve line breaks and spacing */
+         background-color: #e8e8e8;  /* Light grey background */
+         padding: 10px;
+         margin-bottom: 10px;
+         overflow-y: auto;  /* Enable scrolling if content is too long */
+         max-height: 200px;  /* Set a maximum height */
+         }
+         #conversation {
+         background-color: #f9f9f9;  /* Lighter grey background */
+         padding: 10px;
+         overflow-y: auto;  /* Enable scrolling if content is too long */
+         max-height: 200px;  /* Set a maximum height */
+         }
+         .sidebar-right {
+         width: 200px;
+         background-color: #f1f1c1;
+         padding: 10px;
+         height: 100vh;  /* 100% of the viewport height */
+         overflow-y: auto;  /* Enable scrolling if content is too long */
+         }
+      </style>
+   </head>
+   <body>
+      <div class="sidebar">
+         <h3>GitHub Repo Files</h3>
+         <ul id="file-list"></ul>
+      </div>
+      <div class="main-container">
+      <div class="middle">
+         <div id="code-display"></div>
+         <div id="conversation"></div>
+         <!-- more middle content here -->
+         <form id="message-form">
+            <input type="text" id="user-input" placeholder="User input" />
+            <button type="submit">Send</button>
+         </form>
+      </div>
+      <div class="sidebar-right">
+         <h3>Settings</h3>
+         <div>
+            <label for="max-tokens">Max Tokens:</label>
+            <input type="number" id="max-tokens" min="1" value="750">
+         </div>
+         <div>
+            <label for="display-tokens">Display Tokens Used:</label>
+            <input type="checkbox" id="display-tokens">
+         </div>
+      </div>
+      <script>
+         document.addEventListener('DOMContentLoaded', () => {
+             const fileList = document.getElementById('file-list');
+             const codeDisplay = document.getElementById('code-display');
+             const conversationDiv = document.getElementById('conversation');
+             const messageForm = document.getElementById('message-form');
+             const userInput = document.getElementById('user-input');
+         
+             let selectedFiles = [];
+             let files = []; // Store all the files here
+         
+             // Fetch repository files and populate the sidebar
+             fetch('/files')
+                 .then((response) => response.json())
+                 .then((data) => {
+                     files = data.files; // Save the files
+                     files.forEach((file) => {
+                         const listItem = document.createElement('li');
+                         const checkBox = document.createElement('input');
+                         checkBox.type = 'checkbox';
+                         checkBox.addEventListener('change', () => {
+                             const selectedIndex = selectedFiles.findIndex(selectedFile => selectedFile.name === file.name);
+                             if (selectedIndex > -1) {
+                                 selectedFiles.splice(selectedIndex, 1);
+                             } else {
+                                 selectedFiles.push(file);
+                             }
+                         });
+                         listItem.appendChild(checkBox);
+                         const fileLabel = document.createElement('span');
+                         fileLabel.textContent = file.name;
+                         fileLabel.addEventListener('click', () => {
+                             codeDisplay.textContent = file.content;  // Display file content in the middle box
+                         });
+                         listItem.appendChild(fileLabel);
+                         fileList.appendChild(listItem);
+                     });
+                 });
+                 const sendMessage = async (event) => {
+                 event.preventDefault();
+                 const userMessage = userInput.value;
+                 const maxTokens = parseInt(document.getElementById('max-tokens').value, 10);
+                 const displayTokens = document.getElementById('display-tokens').checked;
+                 addMessageToConversation('user', userMessage);
+         
+                 let conversation = [
+                     { role: 'system', content: 'You are a helpful assistant.' },
+                     { role: 'user', content: userMessage },
+                 ];
+         
+                 selectedFiles.forEach(file => {
+                     conversation.push({ role: 'system', content: `This is the content of the file named ${file.name}: ${file.content}` });
+                 });
+         
+                 const response = await fetch('/chat', {
+                     method: 'POST',
+                     headers: {
+                         'Content-Type': 'application/json',
+                     },
+                     body: JSON.stringify({ message: conversation, max_tokens: maxTokens }),
+                 });
+         
+                 const { generatedText, tokensUsed } = await response.json();
+         
+                 addMessageToConversation('assistant', generatedText);
+                 if (displayTokens) {
+                     addMessageToConversation('assistant', `Tokens used: ${tokensUsed}`, true); // Add tokens used as a separate message, flagged as tokens message
+                 }
+         
+                 userInput.value = '';
+             };
+         
+             // Event listener for the form submission
+             messageForm.addEventListener('submit', sendMessage);
+         
+             // Function to add messages to the conversation
+             const addMessageToConversation = (role, content, isTokensMessage) => {
+                 const messageElement = document.createElement('div');
+                 messageElement.classList.add('message');
+                 messageElement.classList.add(role);
+                 if (isTokensMessage) {
+                     messageElement.style.color = 'red'; // If this is a tokens message, make the text red
+                 }
+                 messageElement.textContent = content;
+                 conversationDiv.appendChild(messageElement);
+             };
+         });
+      </script>
+   </body>
 </html>
