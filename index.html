@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>ChatGPT Web Interface</title>
+</head>
+<body>
+  <div id="conversation"></div>
+  <form id="message-form">
+    <input type="text" id="user-input" placeholder="User input" />
+    <button type="submit">Send</button>
+  </form>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const conversationDiv = document.getElementById('conversation');
+      const messageForm = document.getElementById('message-form');
+      const userInput = document.getElementById('user-input');
+
+      const addMessageToConversation = (role, content) => {
+        const messageElement = document.createElement('div');
+        messageElement.classList.add('message');
+        messageElement.classList.add(role);
+        messageElement.textContent = content;
+        conversationDiv.appendChild(messageElement);
+      };
+
+      messageForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const userMessage = userInput.value;
+        addMessageToConversation('user', userMessage);
+
+        const response = await fetch('/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ message: userMessage })
+        });
+
+        const { generatedText } = await response.json();
+        addMessageToConversation('assistant', generatedText);
+
+        userInput.value = '';
+      });
+    });
+  </script>
+
+  <style>
+    .message {
+      margin-bottom: 10px;
+    }
+
+    .user {
+      color: blue;
+    }
+
+    .assistant {
+      color: green;
+    }
+  </style>
+</body>
+</html>
